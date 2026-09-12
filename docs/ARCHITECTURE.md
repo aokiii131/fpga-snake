@@ -662,3 +662,43 @@ This section records the key architectural and RTL implementation decisions made
 ### 8.5. Combinational Safe Defaults (Zero-Latch Policy)
 * **Decision:** The combinational pixel rendering block (which drives `pixel_data`) includes a mandatory `default` case in its state machine evaluation to output `OFF` for all LEDs.
 * **Rationale:** Unmapped states or conditions in SystemVerilog combinational logic (`always_comb`) cause synthesis tools (like Quartus) to infer unintended latches to hold previous values. Explicitly defining a default fallback ensures pure combinational logic is generated, preventing timing violations and unpredictable hardware behavior.
+
+## 9. Hardware Interfacing & Physical Setup
+
+### 9.1. Wiring Diagram & Pin Connections
+
+The WS2812B LED strip is controlled by the Altera DE2 board (Cyclone II EP2C35F672C6 FPGA) via the **GPIO 0 (JP1)** expansion header, powered by an external 5V DC supply (such as a standard 5V/1A–2A USB phone charger).
+
+<!-- Insert the actual physical LED wiring photo here -->
+![WS2812B Hardware Wiring Diagram](images/ws2812b_wiring_diagram.png)
+
+Detailed pin assignments across the DE2 board, external power supply, and LED strip:
+
+| Entity / Device | Signal / Wire | Connected To | Technical Notes |
+| :--- | :--- | :--- | :--- |
+| **WS2812B LED Strip** | **+5V** (Red Wire) | Phone Charger (+5V VBUS) | Dedicated power rail for LED pixels; do NOT draw from FPGA |
+| | **GND** (White/Black Wire) | Phone Charger GND **AND** JP1 Pin 12 | Common 0V reference ground (Common GND) |
+| | **DIN** (Green Wire) | JP1 Pin 1 (`GPIO_0[0]`) | Serial 1-wire NRZ PWM data line |
+| **5V USB Charger** | **VBUS (+5V)** | LED Strip +5V line | Provides stable 5V DC power |
+| | **GND** | LED Strip GND & JP1 Pin 12 | Eliminates ground loop offsets between FPGA and LEDs |
+| **Altera DE2 (Header JP1)** | **Pin 1 (`IO_A0` / `PIN_D25`)** | LED Strip DIN line | 3.3V LVTTL single-wire logic output from `top_snake_game` |
+| | **Pin 12 (GND)** | LED Strip GND / Charger GND | System common ground reference point |
+
+---
+
+### 9.2. Physical Interfacing Details
+
+* **Data Line Interfacing:** The LED strip's `DIN` pad is clamped using an alligator clip lead terminated with a female Dupont jumper, plugged directly into **Pin 1 (`GPIO_0[0]`)** on header JP1.
+* **Power Distribution:** A stripped USB cable from the phone charger breaks out two primary lines:
+  * **Red (+5V):** Connected directly to the `+5V` power lead of the LED strip.
+  * **Black (GND):** Spliced with the LED strip's GND lead and jumpered directly into **Pin 12 (GND)** of header JP1 to establish a shared reference plane.
+* **Built-in Circuit Protection:** According to the Altera DE2 Development Board User Manual (Section 4.6 Expansion Header), all 36 I/O pins on header JP1 feature on-board **47Ω series damping resistors** along with **BAT54S Schottky clamping diodes** protecting against overvoltage, undervoltage, and ringing. Consequently, `PIN_D25` safely drives the WS2812B `DIN` input directly without requiring additional external resistors.
+
+---
+
+### 9.3. Safe Operating Sequence
+
+1. **Hardware Hookup:** Connect the common GND and `DIN` signal lines to header JP1 before applying system power.
+2. **FPGA Bring-up:** Power on the Altera DE2 board, compile the design, and download the configuration bitstream (`top_snake_game.sof`) via Quartus Programmer using the USB-Blaster interface.
+3. **LED Power-up:** Plug in the 5V phone charger to supply the WS2812B strip.
+4. **Teardown Procedure:** When powering down, disconnect the 5V phone charger first, turn off the DE2 board, and remove the GND reference lead last.
