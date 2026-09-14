@@ -353,10 +353,19 @@ Kế hoạch kiểm thử của module bao gồm 7 kịch bản kiểm tra toàn
     \label{fig:wf_tc07_snapshot}
 \end{figure}
 
-\section{Kết quả Mô phỏng Module Button Conditioner (Chờ bổ sung)}
+\newpage
+\section{Button Conditioner}
 
-\section{Kết quả Mô phỏng Module Tick Generator (Chờ bổ sung)}
+Module \texttt{button\_conditioner} thực hiện đồng bộ tín hiệu từ các nút nhấn vật lý vào miền clock 50 MHz, phát hiện sự kiện nhấn và tạo tín hiệu \texttt{btn\_event} dạng xung một chu kỳ. Module được sử dụng làm giao tiếp giữa các nút nhấn của board DE2 và khối điều khiển \texttt{game\_engine}.
 
+\textbf{Trạng thái:} Đã hoàn thiện RTL và kiểm tra chức năng cơ bản.
+
+
+\section{Tick Generator}
+
+Module \texttt{tick\_generator} sử dụng bộ đếm đồng bộ với clock 50 MHz để tạo các xung enable định kỳ cho hệ thống, gồm \texttt{bullet\_tick} với chu kỳ 50 ms và \texttt{snake\_tick} với chu kỳ 250 ms. Các tín hiệu này được sử dụng để điều khiển tốc độ cập nhật của bullet và snake trong \texttt{game\_engine}.
+
+\textbf{Trạng thái:} Đã hoàn thiện RTL và kiểm tra chức năng cơ bản.
 \newpage
 
 \section{Kết quả Mô phỏng Module Game Engine}
