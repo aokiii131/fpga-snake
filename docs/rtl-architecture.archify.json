@@ -1,0 +1,217 @@
+{
+    "schema_version":  1,
+    "diagram_type":  "architecture",
+    "meta":  {
+                 "title":  "fpga-snake · Kiến trúc RTL",
+                 "quality_profile":  "showcase",
+                 "viewBox":  [
+                                 1380,
+                                 800
+                             ],
+                 "repository":  {
+                                    "url":  "https://github.com/aokiii131/fpga-snake",
+                                    "revision":  "b3da1df4839d556774cf12284d4c3f9241215c27",
+                                    "link_mode":  "local-only"
+                                },
+                 "legend":  {
+                                "entries":  {
+                                                "backend":  {
+                                                                "label":  "Module RTL"
+                                                            },
+                                                "external":  {
+                                                                 "label":  "I/O ngoài FPGA"
+                                                             }
+                                            }
+                            }
+             },
+    "components":  [
+                       {
+                           "id":  "keys",
+                           "type":  "external",
+                           "label":  "Nút bấm DE2",
+                           "sublabel":  "KEY[3:0] · tích cực thấp",
+                           "pos":  [
+                                       100,
+                                       20
+                                   ],
+                           "size":  [
+                                        200,
+                                        90
+                                    ]
+                       },
+                       {
+                           "id":  "buttons",
+                           "type":  "backend",
+                           "label":  "button_conditioner",
+                           "sublabel":  "Đồng bộ 2 FF + bắt cạnh xuống",
+                           "pos":  [
+                                       70,
+                                       410
+                                   ],
+                           "size":  [
+                                        260,
+                                        90
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "rtl/button_conditioner.sv",
+                                               "line":  6
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "ticks",
+                           "type":  "backend",
+                           "label":  "tick_generator",
+                           "sublabel":  "Đếm clock → xung enable 1 chu kỳ",
+                           "pos":  [
+                                       510,
+                                       180
+                                   ],
+                           "size":  [
+                                        260,
+                                        90
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "rtl/tick_generator.sv",
+                                               "line":  5
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "game",
+                           "type":  "backend",
+                           "label":  "game_engine",
+                           "sublabel":  "FSM · rắn · đạn · va chạm · pixel",
+                           "pos":  [
+                                       510,
+                                       410
+                                   ],
+                           "size":  [
+                                        260,
+                                        90
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "rtl/game_engine.sv",
+                                               "line":  1
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "driver",
+                           "type":  "backend",
+                           "label":  "ws2812b_driver",
+                           "sublabel":  "Chốt frame → GRB 24 bit → nối tiếp",
+                           "pos":  [
+                                       950,
+                                       410
+                                   ],
+                           "size":  [
+                                        270,
+                                        90
+                                    ],
+                           "sources":  [
+                                           {
+                                               "path":  "rtl/ws2812b_driver.sv",
+                                               "line":  4
+                                           }
+                                       ]
+                       },
+                       {
+                           "id":  "strip",
+                           "type":  "external",
+                           "label":  "Dải LED",
+                           "sublabel":  "60 × WS2812B",
+                           "pos":  [
+                                       985,
+                                       650
+                                   ],
+                           "size":  [
+                                        200,
+                                        90
+                                    ]
+                       }
+                   ],
+    "boundaries":  [
+                       {
+                           "kind":  "region",
+                           "label":  "top_snake_game · 4 instance · clk_50m / rst_sw dùng chung",
+                           "wraps":  [
+                                         "buttons",
+                                         "ticks",
+                                         "game",
+                                         "driver"
+                                     ],
+                           "pad":  40
+                       }
+                   ],
+    "connections":  [
+                        {
+                            "id":  "raw-keys",
+                            "from":  "keys",
+                            "to":  "buttons",
+                            "label":  "key[3:0]",
+                            "labelDy":  175
+                        },
+                        {
+                            "id":  "press-events",
+                            "from":  "buttons",
+                            "to":  "game",
+                            "label":  "btn_event[3:0]",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "id":  "movement-enables",
+                            "from":  "ticks",
+                            "to":  "game",
+                            "label":  "bullet_tick / snake_tick",
+                            "labelDy":  95
+                        },
+                        {
+                            "id":  "logical-pixels",
+                            "from":  "game",
+                            "to":  "driver",
+                            "label":  "pixel_data · 60 × 3 bit",
+                            "variant":  "emphasis"
+                        },
+                        {
+                            "id":  "serial-led",
+                            "from":  "driver",
+                            "to":  "strip",
+                            "label":  "led_data_out",
+                            "variant":  "emphasis",
+                            "labelDy":  95
+                        }
+                    ],
+    "cards":  [
+                  {
+                      "dot":  "cyan",
+                      "title":  "Clock và reset",
+                      "items":  [
+                                    "clk_50m → cả 4 module; một miền 50 MHz.",
+                                    "rst_sw → rst cả 4 module; reset bất đồng bộ, tích cực cao.",
+                                    "bullet_tick: 50 ms; snake_tick: 250 ms. Không tạo clock mới."
+                                ]
+                  },
+                  {
+                      "dot":  "emerald",
+                      "title":  "Trạng thái game",
+                      "items":  [
+                                    "IDLE → PLAYING → WIN hoặc LOSE; reset để chơi lại.",
+                                    "Một đạn; phím ưu tiên đỏ → xanh lá → xanh dương → vàng.",
+                                    "Mặc định 60 LED, rắn dài 5; màu khởi tạo gán cứng tại 55–59."
+                                ]
+                  },
+                  {
+                      "dot":  "amber",
+                      "title":  "Frame và giao tiếp LED",
+                      "items":  [
+                                    "LOAD chốt pixel_data vào tx_frame; SEND truyền; LATCH giữ thấp.",
+                                    "Không có ready/valid; driver tự lặp frame, độc lập tick game.",
+                                    "Mặc định: bit 1,1 µs; LATCH 300 µs; GRB, bit cao trước."
+                                ]
+                  }
+              ]
+}
