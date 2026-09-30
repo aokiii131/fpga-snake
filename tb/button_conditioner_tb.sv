@@ -18,6 +18,11 @@ module button_conditioner_tb;
     always #10 clk = ~clk;          // Clock = 50 MHz -> T = 20ns
 
     initial begin
+        #10us;
+        $fatal(1, "[TIMEOUT] button_conditioner_tb exceeded 10 us");
+    end
+
+    initial begin
         key = 4'b1111;
         
         // TC1: Reset
@@ -29,9 +34,9 @@ module button_conditioner_tb;
         expected_btn_event = 4'b0000;
         @(negedge clk);
         if (btn_event !== expected_btn_event)
-            $error("TC1 FAILED: expected no button event, got %b", btn_event);
+            $fatal(1, "TC1 FAILED: expected no button event, got %b", btn_event);
 
-        @(posedge clk);
+        @(negedge clk);
         // TC2: Single Press
         // Press one button and verify exactly one press event is generated.
         
@@ -40,9 +45,11 @@ module button_conditioner_tb;
         key = 4'b1111;
 
         expected_btn_event = 4'b0001;
-        @(negedge clk);
+        // The pulse is already high after the second synchronizer clock.
+        // Waiting another clock here would sample after the one-cycle pulse.
+        #1;
         if (btn_event !== expected_btn_event)
-            $error("TC2 FAILED: expected 1 button event, got %b", btn_event);
+            $fatal(1, "TC2 FAILED: expected 1 button event, got %b", btn_event);
 
 
         repeat(2) @(negedge clk);
@@ -67,15 +74,16 @@ module button_conditioner_tb;
 
         // Exactly one event must have occurred
         if (event_count != 1)
-            $error("TC3 FAILED: expected exactly 01 event, got %0d", event_count);
+            $fatal(1, "TC3 FAILED: expected exactly 01 event, got %0d", event_count);
 
         // Release must not generate another event
         @(posedge clk);
         #1;
         if (btn_event !== 4'b0000)
-            $error("TC3 FAILED: release generated an unexpected event");
+            $fatal(1, "TC3 FAILED: release generated an unexpected event");
         // TC 4: 
         repeat(5) @(negedge clk);
+        $display("BUTTON CONDITIONER CHECKS PASSED");
     $finish;
     end
 endmodule

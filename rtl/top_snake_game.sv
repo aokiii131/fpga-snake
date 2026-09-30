@@ -15,23 +15,34 @@ module top_snake_game #(
     logic snake_tick;
     logic bullet_tick;
 
+    logic rst_sync1, rst_sync2;
     // Button Conditioner
     logic [3:0] btn_event;
 
     // Game Engine
     logic [2:0] pixel_data [0:LED_COUNT - 1];
 
+    
+    always_ff @(posedge clk_50m or posedge rst_sw) begin
+        if(rst_sw) begin
+            rst_sync1 <= 1'b1;
+            rst_sync2 <= 1'b1;
+        end else begin
+            rst_sync1 <= 1'b0;
+            rst_sync2 <= rst_sync1; 
+        end
+    end
     // Gọi các module con và cắm dây 
     tick_generator u_tick_generator (
         .clk(clk_50m),
-        .rst(rst_sw),
+        .rst(rst_sync2),
         .snake_tick(snake_tick),
         .bullet_tick(bullet_tick)
     );
 
     button_conditioner u_button_conditioner (
         .clk(clk_50m),
-        .rst(rst_sw),
+        .rst(rst_sync2),
         .key(key),
         .btn_event(btn_event)
     );
@@ -41,7 +52,7 @@ module top_snake_game #(
         .BITS_PER_PIXEL(24)
     ) u_ws2812b_driver (
         .clk(clk_50m),
-        .rst(rst_sw),
+        .rst(rst_sync2),
         .pixel_data(pixel_data),
         .led_data_out(led_data_out)
     );
@@ -51,7 +62,7 @@ module top_snake_game #(
         .LED_COUNT(LED_COUNT)
     ) u_game_engine (
         .clk(clk_50m),
-        .rst(rst_sw),
+        .rst(rst_sync2),
         .snake_tick(snake_tick),
         .bullet_tick(bullet_tick),
         .btn_event(btn_event),

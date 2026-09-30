@@ -116,19 +116,16 @@
             end
         end
 
-            // 1.3 Output Block
-        always_comb begin
-            led_data_out = 1'b0; 
-            
-            if (current_state == SEND) begin
-                if (current_bit == 1'b0) begin
-                    if (timing_counter < T0H)
-                        led_data_out = 1'b1;
-                end
-                else begin // current_bit == 1'b1
-                    if (timing_counter < T1H)
-                        led_data_out = 1'b1;               
-                end
-            end
-        end      
+        // Register the pin output to prevent combinational counter/decoder
+        // hazards from reaching DIN. This delays the entire waveform by one
+        // clock; HIGH/LOW widths and the inter-frame latch gap are unchanged.
+        always_ff @(posedge clk or posedge rst) begin
+            if (rst)
+                led_data_out <= 1'b0;
+            else if (current_state == SEND)
+                led_data_out <= current_bit ? (timing_counter < T1H)
+                                            : (timing_counter < T0H);
+            else
+                led_data_out <= 1'b0;
+        end
     endmodule

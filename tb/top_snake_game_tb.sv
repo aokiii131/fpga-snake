@@ -4,8 +4,8 @@ module top_snake_game_tb;
 
     localparam int BULLET_CYCLES_TEST = 20; // Nạp kit: 2_500_000 | Mô phỏng: 20
     localparam int RES_TEST           = 40; // Nạp kit: 15_000    | Mô phỏng: 40
-    localparam int LED_COUNT_TEST     = 6;  // Nạp kit: 60        | Mô phỏng: 06
-    localparam int LENGTH_TEST        = 3;  // Nạp kit: 5         | Mô phỏng: 03
+    localparam int LED_COUNT_TEST     = 12; // Nạp kit: 60        | Mô phỏng: 12
+    localparam int LENGTH_TEST        = 5;  // Nạp kit: 5         | Mô phỏng: 05
 
     logic clk;
     logic rst;
@@ -17,7 +17,8 @@ module top_snake_game_tb;
     int fail_count = 0;
 
     top_snake_game #(
-        .LED_COUNT(LED_COUNT_TEST)
+        .LED_COUNT(LED_COUNT_TEST),
+        .DEFAULT_SNAKE_LENGTH(LENGTH_TEST)
     ) DUT (
         .clk_50m(clk),
         .rst_sw(rst),
@@ -43,83 +44,85 @@ module top_snake_game_tb;
         @(posedge clk) disable iff (rst)
         $fell(key[0]) |-> ##2 (DUT.btn_event[0] == 1'b1) ##1 (DUT.btn_event[0] == 1'b0);
     endproperty
-    assert property (p_btn0_event) else $error("[SVA FAIL] btn_event[0] sinh sai chu ky!");
+    assert property (p_btn0_event) else $fatal(1, "[SVA FAIL] btn_event[0] sinh sai chu ky!");
 
     // SVA 2: Tín hiệu led_data_out không bao giờ bị kẹt ở mức 1 quá 45 chu kỳ clock (T1H max = 40 clock)
     property p_no_stuck_high;
         @(posedge clk) led_data_out |-> ##[1:45] (led_data_out == 1'b0);
     endproperty
-    assert property (p_no_stuck_high) else $error("[SVA FAIL] led_data_out bi treo o muc cao!");
+    assert property (p_no_stuck_high) else $fatal(1, "[SVA FAIL] led_data_out bi treo o muc cao!");
 
     // =========================================================================
-    // TASK PHÂN TÍCH ĐỘ RỘNG XUNG (PROTOCOL CHECKER CHUẨN WS2812B)
+    // TASK PHÂN TÍCH ĐỘ RỘNG XUNG
     // =========================================================================
-    // Nhiệm vụ: Đo thời gian giữ mức High để xác định bit '0' (~300ns/15 clocks) hay '1' (~800ns/40 clocks)
-    task automatic read_ws2812b_byte(output logic [7:0] data_byte);
-        time t_high_start, t_fall, t_next_rise;
-        time t_high, t_low, t_total;
-        data_byte = '0;
+    // Caller da bat canh len dau tien. ref giu moc nay qua ca bien pixel.
+    // Doc lien tuc 24 bit: [23:16] Green, [15:8] Red, [7:0] Blue.
+    task automatic read_pixel_24bit(
+        ref time t_high_start,
+        input bit last_pixel,
+        output logic [23:0] pixel_grb,
+        output bit timing_ok
+    );
+        time t_fall, t_next_rise, t_high, t_low, t_total;
+        pixel_grb = 'x;
+        timing_ok = 1'b1;
 
-        for (int i = 7; i >= 0; i--) begin
-            // 1. Bắt sườn lên và đo TH
-            @(posedge led_data_out);
-            t_high_start = $time;
+        for (int i = 23; i >= 0; i--) begin
+            // Canh len da duoc bat: cho canh xuong de do HIGH cua bit nay.
             @(negedge led_data_out);
             t_fall = $time;
             t_high = t_fall - t_high_start;
 
-            // 2. Bắt sườn lên kế tiếp để đo TL và T_total
-            // (Riêng bit cuối cùng của frame sẽ rơi vào LATCH time)
-            fork
-                begin: wait_next_edge
-                    @(posedge led_data_out);
-                    t_next_rise = $time;
-                    t_low   = t_next_rise - t_fall;
-                    t_total = t_next_rise - t_high_start;
-                end
-                begin: timeout_latch
-                    #2000ns; // Timeout nếu rơi vào thời gian LATCH cuối frame
-                    t_low   = 0;
-                    t_total = 0;
-                end
-            join_any
-            disable wait_next_edge;
-            disable timeout_latch;
-
-            // 3. Kiểm tra tính hợp lệ của xung theo thông số RTL:
-            // clk = 50MHz (20ns)
-            // Bit 0: T0H = 15 clocks (300ns), T0L = 40 clocks (800ns)
-            // Bit 1: T1H = 40 clocks (800ns), T1L = 15 clocks (300ns)
-            // Total = 55 clocks = 1100ns
-            if (t_high >= 200ns && t_high <= 400ns) begin
-                data_byte[i] = 1'b0;
-                if (t_low > 0 && (t_low < 700ns || t_low > 900ns))
-                    $warning("[TIMING FAIL] Bit 0 co T0L khong dung: %0t ns (chuan 800ns)", t_low);
-            end 
-            else if (t_high >= 700ns && t_high <= 900ns) begin
-                data_byte[i] = 1'b1;
-                if (t_low > 0 && (t_low < 200ns || t_low > 400ns))
-                    $warning("[TIMING FAIL] Bit 1 co T1L khong dung: %0t ns (chuan 300ns)", t_low);
-            end 
+            // Kiem tra dung timing RTL tai clock 50 MHz.
+            if (t_high == 300ns)
+                pixel_grb[i] = 1'b0;
+            else if (t_high == 800ns)
+                pixel_grb[i] = 1'b1;
             else begin
-                $error("[TIMING ERROR] Do rong TH bat thuong: %0t ns tai bit %0d", t_high, i);
+                timing_ok = 1'b0;
+                $error("[TIMING FAIL] Bit %0d: HIGH=%0t, expected 300 ns or 800 ns", i, t_high);
+            end
+
+            // Bit cuoi frame co LOW noi lien voi LATCH; khong coi do la
+            // LOW cua mot bit thong thuong. LATCH duoc kiem tra o ws2812b_output_tb.
+            if (!(last_pixel && i == 0)) begin
+                @(posedge led_data_out);
+                t_next_rise = $time;
+                t_low = t_next_rise - t_fall;
+                t_total = t_next_rise - t_high_start;
+
+                if (t_total != 1100ns ||
+                    (pixel_grb[i] === 1'b0 && t_low != 800ns) ||
+                    (pixel_grb[i] === 1'b1 && t_low != 300ns)) begin
+                    timing_ok = 1'b0;
+                    $error("[TIMING FAIL] Bit %0d: LOW=%0t, total=%0t", i, t_low, t_total);
+                end
+
+                // Canh nay vua ket thuc LOW, vua bat dau HIGH cua bit sau.
+                // Luu lai, KHONG cho them mot posedge o dau vong lap.
+                t_high_start = t_next_rise;
             end
         end
     endtask
 
-    task automatic read_pixel_24bit(output logic [23:0] pixel_grb);
-        logic [7:0] g, r, b;
-        read_ws2812b_byte(g);
-        read_ws2812b_byte(r);
-        read_ws2812b_byte(b);
-        pixel_grb = {g, r, b};
-    endtask
+    // Bao ve tat ca cac lenh cho canh: mat tin hieu se FAIL, khong treo TB.
+    initial begin
+        #2ms;
+        $fatal(1, "[TIMEOUT] Top TB khong hoan tat trong 2 ms.");
+    end
 
     // =========================================================================
-    // KỊCH BẢN 5 TEST CASES (TC1 - TC5)
+    // KỊCH BẢN 6 TEST CASES (TC1 - TC6)
     // =========================================================================
     initial begin
         logic [23:0] captured_pixel;
+        logic [23:0] expected_pixel;
+        time bit_start;
+        bit pixel_timing_ok;
+        bit frame_ok;
+        bit tc4_ok;
+
+        tc4_ok = 1;
         rst = 0;
         key = 4'b1111; // Active-low: mac dinh tha nut
         repeat(5) @(negedge clk);
@@ -190,16 +193,22 @@ module top_snake_game_tb;
         // Kiem tra duong truyen tu pin ngoai vao btn_event
         @(negedge clk); key[1] = 0; @(negedge clk); key[1] = 1;
         repeat(1) @(negedge clk);
-        if (DUT.btn_event[1]) $display("[TC4] KEY1 wiring to BLUE event: OK");
+        if (DUT.btn_event == 4'b0010) $display("[TC4] KEY1 wiring to GREEN event: OK");
+        else tc4_ok = 0;
 
         @(negedge clk); key[0] = 0; @(negedge clk); key[0] = 1;
         repeat(1) @(negedge clk);
-        if (DUT.btn_event[0]) $display("[TC4] KEY0 wiring to RED event: OK");
+        if (DUT.btn_event == 4'b0001) $display("[TC4] KEY0 wiring to RED event: OK");
+        else tc4_ok = 0;
 
         @(negedge clk); key[3] = 0; @(negedge clk); key[3] = 1;
         repeat(1) @(negedge clk);
-        if (DUT.btn_event[3]) begin
-            $display("[TC4 PASS] KEY1/2/3 wiring hoan toan chinh xac.");
+        if (DUT.btn_event == 4'b1000) $display("[TC4] KEY3 wiring to YELLOW event: OK");
+        else tc4_ok = 0;
+
+        #1;
+        if (tc4_ok == 1) begin
+            $display("[TC4 PASS] KEY0/1/3 wiring hoan toan chinh xac.");
             pass_count++;
         end else begin
             $error("[TC4 FAIL] Wiring cac nut con lai bi loi!");
@@ -227,20 +236,43 @@ module top_snake_game_tb;
         // TC6: End-to-end output (Đo độ rộng xung giải mã bit tại led_data_out)
         // ---------------------------------------------------------------------
         $display("\n--- TC6: END-TO-END PULSE CHECK TAI LED_DATA_OUT ---");
-        $display("Dang do 24-bit GRB cua Pixel 0 tu duong truyen 1-wire...");
-        
-        // Cho den khi driver vao SEND va bat dau ban bit
-        @(posedge led_data_out);
-        read_pixel_24bit(captured_pixel);
+        $display("Doc frame khoi tao: OFF, sau do 5 dot RED/GREEN/BLUE/YELLOW/RED.");
 
-        $display("Captured 24-bit GRB hex: 0x%06X", captured_pixel);
-        // Mau RED chuan ma hoa la 24'h00_3F_00 (GRB)
-        if (captured_pixel == 24'h00_3F_00 || captured_pixel == 24'h00_00_00) begin
-            $display("[TC6 PASS] Giai ma do rong xung hop le theo giao thuc WS2812B!");
+        // Reset de biet chinh xac frame mong doi. Khong bam nut, game giu IDLE.
+        // Canh len dau tien sau reset chinh la bit 23 cua pixel 0.
+        @(negedge clk);
+        key = 4'b1111;
+        rst = 1;
+        repeat(5) @(negedge clk);
+        rst = 0;
+        @(posedge led_data_out);
+        bit_start = $time;
+        frame_ok = 1'b1;
+
+        for (int p = 0; p < LED_COUNT_TEST; p++) begin
+            // Expected lay tu mau ran khoi tao, khong lay tu decoder cua DUT.
+            case (p - (LED_COUNT_TEST - LENGTH_TEST))
+                0, 4: expected_pixel = 24'h00_3F_00;
+                1:    expected_pixel = 24'h3F_00_00;
+                2:    expected_pixel = 24'h00_00_3F;
+                3:    expected_pixel = 24'h3F_3F_00;
+                default: expected_pixel = 24'h00_00_00;
+            endcase
+
+            read_pixel_24bit(bit_start, p == LED_COUNT_TEST - 1,
+                             captured_pixel, pixel_timing_ok);
+            $display("[TC6] Pixel %0d: expected=%06h captured=%06h", p, expected_pixel, captured_pixel);
+            if (captured_pixel !== expected_pixel || !pixel_timing_ok) begin
+                frame_ok = 1'b0;
+                $error("[TC6 FAIL] Pixel %0d sai du lieu hoac timing.", p);
+            end
+        end
+
+        if (frame_ok) begin
+            $display("[TC6 PASS] Ca frame dung GRB/MSB-first va timing cac bit.");
             pass_count++;
         end else begin
-            $warning("[TC6 WARN] Gia tri mau doc duoc: 0x%06X (kiem tra lai offset frame)", captured_pixel);
-            pass_count++;
+            fail_count++;
         end
 
         // Tong ket
@@ -248,6 +280,8 @@ module top_snake_game_tb;
         $display("\n==============================================");
         $display("TOP-LEVEL VERIFICATION COMPLETE: %0d PASS, %0d FAIL", pass_count, fail_count);
         $display("==============================================");
+        if (fail_count != 0)
+            $fatal(1, "Top-level verification failed.");
         $finish;
     end
 

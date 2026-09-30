@@ -1,6 +1,6 @@
 
-vlog -sv rtl/game_engine.sv
-vlog -sv tb/game_engine_tb.sv
+vlog -sv rtl/ws2812b_driver.sv
+vlog -sv tb/ws2812b_driver_tb.sv
 
 restart -f
 

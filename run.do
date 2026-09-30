@@ -5,10 +5,10 @@ quit -sim
 vlib work
 vmap work work
 
-vlog -sv rtl/game_engine.sv
-vlog -sv tb/game_engine_tb.sv
+vlog -sv rtl/ws2812b_driver.sv
+vlog -sv tb/ws2812b_driver_tb.sv
 
-vsim -voptargs="+acc" work.game_engine_tb
+vsim -voptargs="+acc" work.ws2812b_driver_tb
 
-add wave -radix binary -position insertpoint sim:/game_engine_tb/DUT/*
+add wave -radix binary -position insertpoint sim:/ws2812b_driver_tb/DUT/*
 run -all

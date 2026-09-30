@@ -37,7 +37,7 @@ module game_engine_tb;
         input string  fail_msg       // Fail message: thông báo lỗi khi condition không đạt
     );
         test_count++;
-        if(!condition) begin
+        if(condition !== 1'b1) begin
             $error("Time: %8t | [FAIL] %s: %s",$time, tc_name, fail_msg);
             error_count++;
         end
@@ -50,6 +50,11 @@ module game_engine_tb;
     // Clock generator 50MHz (Chu kỳ 20ns)
     initial clk = 0;
     always #10 clk = ~clk;
+
+    initial begin
+        #1ms;
+        $fatal(1, "[TIMEOUT] game_engine_tb exceeded 1 ms");
+    end
 
     // =========================================================================
     // CÁC TEST CASES
@@ -299,23 +304,23 @@ module game_engine_tb;
                   @(negedge clk);
                   btn_event = 4'b0000;
                   #1;
-            
-            // Đẩy đạn tới ngay trước đầu rắn
-            while(DUT.bullet_active && (DUT.bullet_position < DUT.head_position - 1)) begin
+                  
+                  // Đẩy đạn tới ngay trước đầu rắn
+                  while(DUT.bullet_active && (DUT.bullet_position < DUT.head_position - 1)) begin
+                        @(negedge clk);
+                        bullet_tick = 1;
+                        @(negedge clk);
+                        bullet_tick = 0;
+                        @(negedge clk);
+                  end
+
+                  // Kích thích va chạm
                   @(negedge clk);
                   bullet_tick = 1;
                   @(negedge clk);
                   bullet_tick = 0;
-                  @(negedge clk);
+                  #1;
             end
-
-            // Kích thích va chạm
-            @(negedge clk);
-            bullet_tick = 1;
-            @(negedge clk);
-            bullet_tick = 0;
-            #1;
-      end
       @(negedge clk);
       // Kiểm tra điều kiện WIN
         check("TC8_SNAKE_LENGTH_ZERO",
@@ -567,6 +572,159 @@ task automatic tc12_button_behavior();
         $display("--------------------------------------------------");
     endtask
 
+task automatic tc13_lose_state_changing();
+      int pre_head;
+      int pre_bullet;
+      int pre_length;
+      
+      snake_tick = 0;
+      bullet_tick = 0;
+      btn_event = '0;
+
+      rst = 1;
+      repeat(2) @(negedge clk);
+      rst = 0;
+      #1;
+
+      repeat(2) @(negedge clk);
+      btn_event = 4'b1000; 
+      @(negedge clk);
+      btn_event = 4'b0000;
+
+      while(DUT.head_position > 1) begin
+            @(negedge clk);
+            snake_tick = 1;
+            @(negedge clk);
+            snake_tick = 0;
+      end
+
+      // Kích đi vào LED 0
+      repeat(2) @(negedge clk);
+      snake_tick = 1;
+      btn_event  = 4'b0001;
+      @(negedge clk);
+      snake_tick = 0;
+      btn_event = 4'b0000;
+      #1;
+
+      check("TC13_BULLET_CHEKING",
+            DUT.bullet_active   == 0,
+            "Van sinh bullet khi vao LOSE.");
+
+      for (int i = 0; i < LED_TEST; i++) begin
+      check($sformatf("TC13_LED_%0d_RED", i),
+            pixel_data[i] === DUT.RED,
+            "LED khong do khi vao LOSE.");
+      end
+
+      check("TC13_ENTER_LOSE",
+            DUT.current_state === DUT.LOSE &&
+            DUT.head_position === 0,
+            "Khong vao LOSE ngay khi ran toi LED 0.");
+
+      pre_head = DUT.head_position;
+      pre_bullet = DUT.bullet_position;
+      pre_length = DUT.snake_length;
+      
+      snake_tick = 1;
+      bullet_tick = 1; 
+      
+      @(negedge clk); 
+
+      bullet_tick = 0;
+      snake_tick = 0; #1;
+
+      check("TC13_MOVEMENT_CHECKING",(
+            DUT.head_position   === pre_head   &&
+            DUT.bullet_position === pre_bullet &&
+            DUT.snake_length    === pre_length),
+            "Du lieu game khong giu nguyen."
+            );
+    endtask
+
+    task automatic tc14_win_state_changing();
+      int pre_head;
+      int pre_bullet;
+      int pre_length;
+      
+      snake_tick = 0;
+      bullet_tick = 0;
+      btn_event = '0;
+
+      rst = 1;
+      repeat(2) @(negedge clk);
+      rst = 0;
+      #1;
+
+      repeat(2) @(negedge clk);
+      btn_event = 4'b1000; 
+      @(negedge clk);
+      btn_event = 4'b0000;
+
+      // Tạo đạn (tự động) khớp với đầu rắn
+      while (DUT.snake_length > 0) begin
+            @(negedge clk);
+            btn_event = get_btn_from_color(DUT.snake_array[DUT.head_position]);
+            @(negedge clk);
+            btn_event = 4'b0000;
+            #1;
+            
+            // Đẩy đạn tới ngay trước đầu rắn
+            while(DUT.bullet_active && (DUT.bullet_position < DUT.head_position - 1)) begin
+                  @(negedge clk);
+                  bullet_tick = 1;
+                  @(negedge clk);
+                  bullet_tick = 0;
+                  @(negedge clk);
+            end
+
+            // Kích thích va chạm
+            @(negedge clk);
+            bullet_tick = 1;
+            btn_event  = 4'b0001;
+            @(negedge clk);
+            bullet_tick = 0;
+            btn_event = 4'b0000;
+            #1;
+      end
+      #1;
+
+      for (int i = 0; i < LED_TEST; i++) begin
+      check($sformatf("TC14_LED_%0d_GREEN", i),
+            pixel_data[i] === DUT.GREEN,
+            "LED khong do khi vao WIN.");
+      end
+
+      check("TC14_ENTER_WIN",
+            DUT.current_state === DUT.WIN &&
+            DUT.snake_length === 0,
+            "Khong vao WIN ngay khi snake_length = 0.");
+
+      check("TC14_BULLET_CHEKING",
+            DUT.bullet_active   == 0,
+            "Van sinh bullet khi vao WIN.");
+
+      pre_head = DUT.head_position;
+      pre_bullet = DUT.bullet_position;
+      pre_length = DUT.snake_length;
+
+      snake_tick = 1;
+      bullet_tick = 1; 
+      
+      @(negedge clk); 
+
+      bullet_tick = 0;
+      snake_tick = 0; #1;
+
+
+      check("TC14_MOVEMENT_CHECKING",(
+            DUT.head_position   === pre_head   &&
+            DUT.bullet_position === pre_bullet &&
+            DUT.snake_length    === pre_length),
+            "Du lieu game khong giu nguyen."
+            );
+    endtask
+
     // =========================================================================
     // Main Flow Execution
     // =========================================================================
@@ -591,6 +749,9 @@ task automatic tc12_button_behavior();
          tc10_restart_from_lose();
          tc11_simultaneous_ticks();
          tc12_button_behavior();
+         tc13_lose_state_changing();
+         tc14_win_state_changing();
+
         repeat(5) @(negedge clk);
         $display("\n==============================================");
         if (error_count == 0)
@@ -598,6 +759,8 @@ task automatic tc12_button_behavior();
         else
             $display("VERIFICATION COMPLETED WITH %0d ERRORS!", error_count);
         $display("==============================================");
+        if (error_count != 0)
+            $fatal(1, "Game engine verification failed: %0d errors", error_count);
         $finish;
     end
 

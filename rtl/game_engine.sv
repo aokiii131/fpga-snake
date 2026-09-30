@@ -12,6 +12,7 @@ module game_engine
 
     output logic [2:0]   pixel_data [0:LED_COUNT - 1]
 );
+    localparam int INITIAL_HEAD = LED_COUNT - DEFAULT_LENGTH;
     // Color Encoding
     localparam logic [2:0] OFF    = 3'b000;
     localparam logic [2:0] RED    = 3'b001;
@@ -105,7 +106,11 @@ module game_engine
         end
 
         // 6. Fire
-        if (!bullet_active && (|btn_event)) begin
+        if(next_length == 0 || next_head == 0) begin
+            next_active = 0;
+            next_color = OFF;
+        end
+        else if (!bullet_active && (|btn_event) ) begin
             next_active = 1'b1;
             next_bullet = '0;
             next_color  = set_color;
@@ -125,9 +130,9 @@ module game_engine
             end
             
             PLAYING: begin
-                if      (snake_length == 0)
+                if      (next_length == 0)
                     next_state = WIN;
-                else if (head_position == 0)
+                else if (next_head == 0)
                     next_state = LOSE;
             end
 
@@ -156,12 +161,12 @@ module game_engine
                 snake_array[i] <= OFF;
                 end
             // Initialize Snake
-            snake_array[55] <= RED;
-            snake_array[56] <= GREEN;
-            snake_array[57] <= BLUE;
-            snake_array[58] <= YELLOW;
-            snake_array[59] <= RED;
-        
+            snake_array[INITIAL_HEAD] <= RED;
+            snake_array[INITIAL_HEAD + 1] <= GREEN;
+            snake_array[INITIAL_HEAD + 2] <= BLUE;
+            snake_array[INITIAL_HEAD + 3] <= YELLOW;
+            snake_array[INITIAL_HEAD + 4] <= RED;
+
         end else begin
             // update FSM
             current_state <= next_state;

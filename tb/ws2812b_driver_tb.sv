@@ -77,15 +77,21 @@ module ws2812b_driver_tb;
         $display("TEST CASE 5 : SNAPSHOT ISOLATION");
         rst = 1;
         @(negedge clk);
+        pixel_data[0] = 3'b100;
+        pixel_data[1] = 3'b001;
+        pixel_data[2] = 3'b011;
+
+        @(negedge clk);
         rst = 0;
-        #1;
-        for(int i = TEST_LEDS-1; i >= 0; i--) begin
-            pixel_data[i] = $urandom_range(4,0);
-        end
+
+        wait(DUT.current_state == DUT.SEND);
+
         $display("Before pixel_data change:");
         for(int i = 0; i < TEST_LEDS; i++)
             $display("pixel_data[%0d] = %03b | tx_frame[%0d] = %03b",
                     i, pixel_data[i], i, DUT.tx_frame[i]);
+
+       repeat(3) @(negedge clk);
 
         pixel_data[0] = 3'b010;
         pixel_data[1] = 3'b011;
@@ -97,10 +103,28 @@ module ws2812b_driver_tb;
         for(int i = 0; i < TEST_LEDS; i++)
             $display("pixel_data[%0d] = %03b | tx_frame[%0d] = %03b",
                     i, pixel_data[i], i, DUT.tx_frame[i]);
+
+        wait(DUT.current_state == DUT.LATCH);
+
+        wait(DUT.current_state == DUT.LOAD);
+
+        wait(DUT.current_state == DUT.SEND);
+
+        $display("After a new cycle change:");
+        for(int i = 0; i < TEST_LEDS; i++)
+            $display("pixel_data[%0d] = %03b | tx_frame[%0d] = %03b",
+                    i, pixel_data[i], i, DUT.tx_frame[i]);
+
+
     endtask
 
     initial clk = 0;
     always #10 clk = ~clk;
+
+    initial begin
+        #5ms;
+        $fatal(1, "[TIMEOUT] ws2812b_driver_tb exceeded 5 ms");
+    end
 
     initial begin
         int i;
